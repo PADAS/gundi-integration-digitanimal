@@ -129,12 +129,13 @@ async def action_pull_observations(integration, action_config: PullObservationsC
         message = f"Error while pulling observations for integration {integration.id} using {auth_config}. Exception: {e}"
         logger.exception(message)
         # Remove all device states for this integration (to avoid processing unsend observations)
-        for device in devices_response.data.devices:
-            await state_manager.delete_state(
-                integration_id=integration.id,
-                action_id="pull_observations",
-                source_id=device.DEVICE_COLLAR
-            )
+        if devices_response and devices_response.data.devices:  # Check if devices_response is not None
+            for device in devices_response.data.devices:
+                await state_manager.delete_state(
+                    integration_id=integration.id,
+                    action_id="pull_observations",
+                    source_id=device.DEVICE_COLLAR
+                )
         raise
 
 @activity_logger()
