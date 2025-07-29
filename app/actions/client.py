@@ -82,7 +82,7 @@ async def get_devices_observations(integration_id, base_url, auth, params=None):
     :return: The devices list response
     """
 
-    logger.info(f"Getting devices historical observations for integration: '{integration_id}' Username: '{auth.username}")
+    logger.info(f"Getting devices historical observations for integration: '{integration_id}' Username: '{auth.username}'")
 
     url = f"{base_url}get_device_info.php"
 
