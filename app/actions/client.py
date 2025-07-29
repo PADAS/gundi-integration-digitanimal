@@ -31,7 +31,7 @@ class DigitAnimalErrorException(Exception):
         super().__init__(f"'{self.status_code}: {self.message}, Error: {self.error}'")
 
 
-# Pydantic models (representing integration objects to receive/manipulate info from tle external API)
+# Pydantic models (representing integration objects to receive/manipulate info from the external API)
 class DigitAnimalHistoricalRequestParams(pydantic.BaseModel):
     init_date: str
     end_date: str
