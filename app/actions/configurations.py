@@ -33,12 +33,10 @@ class PullObservationsConfig(PullActionConfiguration):
 
 class PullHistoricalObservationsConfig(PullActionConfiguration, ExecutableActionMixin):
     start_date: datetime.datetime = FieldWithUIOptions(
-        '',
         title="Start Date",
         description="The start date for the historical data pull. (Must be 7 days or less from end_date)",
     )
     end_date: datetime.datetime = FieldWithUIOptions(
-        '',
         title="End Date",
         description="The end date for the historical data pull. (Must be 7 days or less from start_date)",
     )
