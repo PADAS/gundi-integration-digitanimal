@@ -61,7 +61,7 @@ class PullHistoricalObservationsConfig(PullActionConfiguration, ExecutableAction
         ],
     )
 
-    @pydantic.model_validator(mode='before')
+    @pydantic.root_validator
     def check_date_range(cls, values):
         start = values.get("start_date")
         end = values.get("end_date")
