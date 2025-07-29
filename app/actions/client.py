@@ -36,7 +36,7 @@ class DigitAnimalHistoricalRequestParams(pydantic.BaseModel):
     init_date: str
     end_date: str
 
-    @root_validator(pre=True)
+    @model_validator(mode='before')
     def parse_datetime(cls, values):
         for key, val in values.items():
             values[key] = val.strftime("%Y-%m-%d %H:%M:%S")
