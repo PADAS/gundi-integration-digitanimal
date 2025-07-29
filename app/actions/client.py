@@ -8,6 +8,7 @@ from pydantic import root_validator
 from typing import List, Optional
 
 from app.services.state import IntegrationStateManager
+from app.actions.configurations import AuthenticateConfig
 
 
 state_manager = IntegrationStateManager()
@@ -71,7 +72,12 @@ class DigitAnimalResponse(pydantic.BaseModel):
     data: DigitAnimalData
 
 
-async def get_devices_observations(integration_id, base_url, auth, params=None):
+async def get_devices_observations(
+        integration_id: str,
+        base_url: str,
+        auth: AuthenticateConfig,
+        params: dict = None
+):
     """
         Call the client's '/api/get_device_info.php' endpoint (with dates range)
 
@@ -82,11 +88,11 @@ async def get_devices_observations(integration_id, base_url, auth, params=None):
     :return: The devices list response
     """
 
-    logger.info(f"Getting devices historical observations for integration: '{integration_id}' Username: '{auth.username}'")
+    logger.info(f"Getting devices observations for integration: '{integration_id}' Username: '{auth.username}'")
 
     url = f"{base_url}get_device_info.php"
 
-    async with httpx.AsyncClient(timeout=120) as session:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=30.0, write=15.0, pool=5.0)) as session:
         response = await session.get(
             url=url,
             params=params,
@@ -96,7 +102,7 @@ async def get_devices_observations(integration_id, base_url, auth, params=None):
 
     response_json = response.json()
 
-    logger.info(f"Got devices historical observations for username: '{auth.username}'")
+    logger.info(f"Got devices observations for username: '{auth.username}'")
     logger.debug(f"Response: {response_json}")
 
     return DigitAnimalResponse.parse_obj(response_json)
