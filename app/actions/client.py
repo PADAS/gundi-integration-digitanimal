@@ -82,7 +82,7 @@ async def get_devices_observations(
         Call the client's 'get_device_info.php' endpoint (with dates range)
 
     :param: integration_id: The integration ID
-    :param: url: The base URL of the DigitAnimal API
+    :param: base_url: The base URL of the DigitAnimal API
     :param: auth: The configuration object containing authentication details
     :param: params: The configuration object containing date range details
     :return: The devices list response
