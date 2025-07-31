@@ -21,13 +21,9 @@ state_manager = IntegrationStateManager()
 DIGITANIMAL_BASE_URL = "https://digitanimalapp.com/api/"
 
 
-def transform(config, device):
+def transform(device):
     device_id = device.DEVICE_COLLAR
     recorded_at = device.DEVICE_TIME
-
-    # create timezone object to be applied to DEVICE_TIME
-    time_delta = timedelta(hours=config.gmt_offset)
-    timezone_object = timezone(time_delta)
 
     lat = device.LAT
     lon = device.LNG
@@ -41,7 +37,7 @@ def transform(config, device):
         "source": device_id,
         "type": "tracking-device",
         "subject_type": "vehicle",
-        "recorded_at": recorded_at.replace(tzinfo=timezone_object),
+        "recorded_at": recorded_at,
         "location": {
             "lat": lat,
             "lon": lon
@@ -54,9 +50,13 @@ async def action_auth(integration, action_config: AuthenticateConfig):
     logger.info(f"Executing 'auth' action with integration ID {integration.id} and action_config {action_config}...")
 
     base_url = integration.base_url or DIGITANIMAL_BASE_URL
+    auth = {
+        "username": action_config.username,
+        "password": action_config.password.get_secret_value(),
+    }
 
     try:
-        devices_response = await client.get_devices_observations(integration.id, base_url, action_config)
+        devices_response = await client.get_devices_observations(integration.id, base_url, auth)
         # DigitAnimal does not return error codes when the auth fails, the lack of 'devices' is the only indication of failure
         if not devices_response.data.devices:
             logger.error(f"Failed to authenticate with integration {integration.id} using {action_config}")
@@ -72,9 +72,13 @@ async def action_pull_observations(integration, action_config: PullObservationsC
 
     base_url = integration.base_url or DIGITANIMAL_BASE_URL
     auth_config = get_auth_config(integration)
+    auth = {
+        "username": auth_config.username,
+        "password": auth_config.password.get_secret_value(),
+    }
 
     try:
-        devices_response = await client.get_devices_observations(integration.id, base_url, auth_config)
+        devices_response = await client.get_devices_observations(integration.id, base_url, auth)
         # Check if there are devices associated with the account (auth was successful and the account is active)
         devices = devices_response.data.devices
         if devices:
@@ -82,38 +86,28 @@ async def action_pull_observations(integration, action_config: PullObservationsC
             observations_extracted = 0
             logger.info(f"Found {len(devices)} devices for integration {integration.id} Account: {auth_config.username}")
             for device in devices:
-                device_state = await state_manager.get_state(
+                # fix device.DEVICE_TIME timezone
+                recorded_at = device.DEVICE_TIME
+                time_delta = timedelta(hours=action_config.gmt_offset)
+                timezone_object = timezone(time_delta)
+
+                device.DEVICE_TIME = recorded_at.replace(tzinfo=timezone_object)
+
+                if device_state := await state_manager.get_state(
                     integration_id=integration.id,
                     action_id="pull_observations",
                     source_id=device.DEVICE_COLLAR
-                )
-                if not device_state:
-                    observations.append(transform(action_config, device))
-                    # Set the device state with current observation time
-                    await state_manager.set_state(
-                        integration_id=integration.id,
-                        action_id="pull_observations",
-                        source_id=device.DEVICE_COLLAR,
-                        state={
-                            "latest_device_datetime": device.DEVICE_TIME.isoformat()
-                        }
-                    )
-                else:
+                ):
                     # Check if the device has new observations since the last pull
                     latest_device_datetime = datetime.fromisoformat(device_state["latest_device_datetime"])
                     if device.DEVICE_TIME > latest_device_datetime:
-                        observations.append(transform(action_config, device))
-                        # Set the device state with current observation time
-                        await state_manager.set_state(
-                            integration_id=integration.id,
-                            action_id="pull_observations",
-                            source_id=device.DEVICE_COLLAR,
-                            state={
-                                "latest_device_datetime": device.DEVICE_TIME.isoformat()
-                            }
-                        )
+                        observations.append(transform(device))
                     else:
                         logger.info(f"Filtering observation {device.DEVICE_TIME} for device {device.DEVICE_COLLAR}")
+                else:
+                    # new observation
+                    observations.append(transform(device))
+
 
             if observations:
                 logger.info(f"Sending {len(observations)} observations to Gundi")
@@ -121,6 +115,18 @@ async def action_pull_observations(integration, action_config: PullObservationsC
                     logger.info(f'Sending observations batch #{i}: {len(batch)} observations. Username: {auth_config.username}')
                     response = await send_observations_to_gundi(observations=batch, integration_id=integration.id)
                     observations_extracted += len(response)
+
+                # Save latest device updated_at
+                for obs in observations:
+                    await state_manager.set_state(
+                        integration_id=integration.id,
+                        action_id="pull_observations",
+                        source_id=obs["source"],
+                        state={
+                            "latest_device_datetime": obs["recorded_at"].isoformat()
+                        }
+                    )
+
             return {"observations_extracted": observations_extracted}
         else:
             logger.warning(f"No devices found for integration {integration.id} Account: {auth_config.username}")
@@ -128,14 +134,6 @@ async def action_pull_observations(integration, action_config: PullObservationsC
     except Exception as e:
         message = f"Error while pulling observations for integration {integration.id} using {auth_config}. Exception: {e}"
         logger.exception(message)
-        # Remove all device states for this integration (to avoid processing unsend observations)
-        if devices_response and devices_response.data.devices:  # Check if devices_response is not None
-            for device in devices_response.data.devices:
-                await state_manager.delete_state(
-                    integration_id=integration.id,
-                    action_id="pull_observations",
-                    source_id=device.DEVICE_COLLAR
-                )
         raise
 
 @activity_logger()
@@ -144,17 +142,21 @@ async def action_pull_historical_observations(integration, action_config: PullHi
 
     base_url = integration.base_url or DIGITANIMAL_BASE_URL
     auth_config = get_auth_config(integration)
+    auth = {
+        "username": auth_config.username,
+        "password": auth_config.password.get_secret_value(),
+    }
 
     params = {
-        "init_date": action_config.start_date.strftime("%Y-%m-%d %H:%M:%S"),
-        "end_date": action_config.end_date.strftime("%Y-%m-%d %H:%M:%S")
+        "init_date": action_config.start_date,
+        "end_date": action_config.end_date
     }
 
     try:
         devices_response = await client.get_devices_observations(
             integration.id,
             base_url,
-            auth_config,
+            auth,
             params
         )
         # Check if there are devices associated with the account (auth was successful and the account is active)
@@ -163,8 +165,8 @@ async def action_pull_historical_observations(integration, action_config: PullHi
             observations = []
             observations_extracted = 0
             logger.info(f"Found {len(devices_historical)} devices for integration {integration.id} Account: {auth_config.username}")
-            for device in devices_historical:
-                observations.append(transform(action_config, device))
+
+            observations.extend(transform(device) for device in devices_historical)
 
             if observations:
                 logger.info(f"Sending {len(observations)} observations to Gundi")

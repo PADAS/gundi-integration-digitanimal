@@ -75,7 +75,7 @@ class DigitAnimalResponse(pydantic.BaseModel):
 async def get_devices_observations(
         integration_id: str,
         base_url: str,
-        auth: AuthenticateConfig,
+        auth: dict,
         params: dict = None
 ):
     """
@@ -88,21 +88,24 @@ async def get_devices_observations(
     :return: The devices list response
     """
 
-    logger.info(f"Getting devices observations for integration: '{integration_id}' Username: '{auth.username}'")
+    logger.info(f"Getting devices observations for integration: '{integration_id}' Username: '{auth['username']}'")
 
     url = f"{base_url}get_device_info.php"
+
+    if params:
+        params = DigitAnimalHistoricalRequestParams(**params).dict()
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=30.0, write=15.0, pool=5.0)) as session:
         response = await session.get(
             url=url,
             params=params,
-            auth=(auth.username, auth.password.get_secret_value()),
+            auth=(auth['username'], auth['password']),
         )
         response.raise_for_status()
 
     response_json = response.json()
 
-    logger.info(f"Got devices observations for username: '{auth.username}'")
+    logger.info(f"Got devices observations for username: '{auth['username']}'")
     logger.debug(f"Response: {response_json}")
 
     return DigitAnimalResponse.parse_obj(response_json)
