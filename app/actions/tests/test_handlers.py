@@ -62,10 +62,17 @@ async def test_action_pull_observations_success(mocker, mock_publish_event, inte
     assert result["observations_extracted"] == 1
 
 @pytest.mark.asyncio
-async def test_action_pull_observations_no_devices(integration_v2, auth_config):
+async def test_action_pull_observations_no_devices(mocker, mock_publish_event, integration_v2, auth_config):
     integration = integration_v2
     # Modify auth config
     integration.configurations[2].data = {"username": "user", "password": "pass"}
+
+    mocker.patch("app.services.activity_logger.publish_event", mock_publish_event)
+    mocker.patch("app.services.action_runner.publish_event", mock_publish_event)
+    mocker.patch("app.services.action_scheduler.trigger_action", return_value=None)
+    mocker.patch("app.services.action_scheduler.publish_event", mock_publish_event)
+    mocker.patch("app.services.action_runner.execute_action", return_value=None)
+
     devices_response = MagicMock(data=MagicMock(devices=None))
     with patch("app.actions.client.get_devices_observations", new=AsyncMock(return_value=devices_response)):
         result = await handlers.action_pull_observations(integration, MagicMock(gmt_offset=0))
@@ -111,10 +118,17 @@ async def test_action_pull_historical_observations_success(mocker, mock_publish_
     assert result["observations_extracted"] == 1
 
 @pytest.mark.asyncio
-async def test_action_pull_historical_observations_no_devices(integration_v2, auth_config):
+async def test_action_pull_historical_observations_no_devices(mocker, mock_publish_event, integration_v2, auth_config):
     integration = integration_v2
     # Modify auth config
     integration.configurations[2].data = {"username": "user", "password": "pass"}
+
+    mocker.patch("app.services.activity_logger.publish_event", mock_publish_event)
+    mocker.patch("app.services.action_runner.publish_event", mock_publish_event)
+    mocker.patch("app.services.action_scheduler.trigger_action", return_value=None)
+    mocker.patch("app.services.action_scheduler.publish_event", mock_publish_event)
+    mocker.patch("app.services.action_runner.execute_action", return_value=None)
+
     devices_response = MagicMock(data=MagicMock(history=None))
     with patch("app.actions.client.get_devices_observations", new=AsyncMock(return_value=devices_response)):
         result = await handlers.action_pull_historical_observations(
